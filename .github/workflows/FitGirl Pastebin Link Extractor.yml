@@ -2,6 +2,12 @@ name: FitGirl Pastebin Link Extractor
 
 on:
   workflow_dispatch:
+    inputs:
+      links:
+        description: "Paste FitGirl PrivateBin and/or FileKeeper URLs (separate multiple links with spaces, commas, or new lines)"
+        required: false
+        type: string
+        default: ""
 
 permissions:
   contents: read
@@ -25,6 +31,8 @@ jobs:
           python -m pip install -r fitgirl-extractor/requirements.txt
 
       - name: Extract direct links
+        env:
+          WORKFLOW_LINKS: ${{ inputs.links }}
         run: python fitgirl-extractor/extract.py
 
       - name: Upload extracted links artifact
