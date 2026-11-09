@@ -1,14 +1,16 @@
 # FitGirl Pastebin Link Extractor
 
-A manually triggered GitHub Actions workflow that decrypts a FitGirl PrivateBin paste, extracts its FileKeeper file-page URLs, and resolves those pages to direct CDN links.
+A manually triggered GitHub Actions workflow that decrypts FitGirl PrivateBin pastes, extracts FileKeeper file-page URLs, and resolves those pages to direct CDN links.
 
 ## Run
 
-1. Add a FitGirl paste URL (including its key) or individual FileKeeper URLs to `fitgirl-extractor/links.txt`, one per line.
-2. Commit the input changes.
-3. Open **Actions** → **FitGirl Pastebin Link Extractor** → **Run workflow**.
-4. Download the `fitgirl-extracted-links` artifact from the completed run. It contains `extracted_links.txt`.
+1. Open **Actions** → **FitGirl Pastebin Link Extractor** → **Run workflow**.
+2. Expand the **Links** input and paste one or more FitGirl PrivateBin URLs (including their keys) and/or FileKeeper URLs. Separate multiple URLs with spaces, commas, or new lines.
+3. Click **Run workflow**.
+4. When the run finishes, download the `fitgirl-extracted-links` artifact. It contains `extracted_links.txt`.
 
-The artifact is retained for 3 days. CAPTCHA-protected FileKeeper pages are skipped. This workflow does not solve CAPTCHAs. Direct CDN links may expire.
+If the **Links** field is left empty, the workflow uses `fitgirl-extractor/links.txt` as a fallback. The artifact is retained for 3 days.
 
-**Security:** Do not commit private paste keys to a public repository. For private pastes, store the full URL as a GitHub Actions secret and adapt the workflow to read it, or use a private repository.
+CAPTCHA-protected FileKeeper pages are skipped; this workflow does not solve CAPTCHAs. Direct CDN links may expire.
+
+**Security:** Do not commit private paste keys to a public repository. The workflow input is supplied at run time and is not written into the repository, but avoid sharing run logs or input values publicly.
