@@ -113,6 +113,7 @@ def extract_all(input_text):
     input_urls = re.findall(r"https?://[^\s,;]+", input_text)
     for line in input_urls:
         line = line.strip().rstrip("\"'<>)]}")
+        if not line:
             continue
 
         if line.startswith("https://paste.fitgirl-repacks.site/"):
