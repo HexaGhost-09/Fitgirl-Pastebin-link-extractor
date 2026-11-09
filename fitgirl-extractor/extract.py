@@ -3,6 +3,7 @@
 
 import base64
 import json
+import os
 import re
 import time
 import zlib
@@ -109,9 +110,10 @@ def extract_all(input_text):
     session = cffi_requests.Session(impersonate="chrome")
     extracted = []
 
-    for line in input_text.splitlines():
-        line = line.strip()
-        if not line or line.startswith("#"):
+    input_urls = re.findall(r"https?://[^\\s,;]+", input_text)
+    for line in input_urls:
+        line = line.strip().rstrip(\"\"'<>)]}\")
+        if not line:
             continue
 
         if line.startswith("https://paste.fitgirl-repacks.site/"):
@@ -140,10 +142,17 @@ def extract_all(input_text):
 
 
 def main():
-    if not INPUT_FILE.exists():
-        raise SystemExit(f"Input file not found: {INPUT_FILE}")
+    workflow_links = os.environ.get("WORKFLOW_LINKS", "").strip()
+    if workflow_links:
+        input_text = workflow_links
+        print("Using URLs supplied in the GitHub Actions Run workflow input.")
+    elif INPUT_FILE.exists():
+        input_text = INPUT_FILE.read_text(encoding="utf-8")
+        print(f"Using URLs from {INPUT_FILE}.")
+    else:
+        raise SystemExit("No links supplied in the workflow input and links.txt was not found.")
 
-    results = extract_all(INPUT_FILE.read_text(encoding="utf-8"))
+    results = extract_all(input_text)
     OUTPUT_FILE.write_text(
         "\n".join(results) + ("\n" if results else ""), encoding="utf-8"
     )
