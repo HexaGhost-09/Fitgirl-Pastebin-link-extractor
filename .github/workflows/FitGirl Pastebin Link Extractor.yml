@@ -1,0 +1,37 @@
+name: FitGirl Pastebin Link Extractor
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r fitgirl-extractor/requirements.txt
+
+      - name: Extract direct links
+        run: python fitgirl-extractor/extract.py
+
+      - name: Upload extracted links artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fitgirl-extracted-links
+          path: fitgirl-extractor/extracted_links.txt
+          if-no-files-found: warn
+          retention-days: 3
