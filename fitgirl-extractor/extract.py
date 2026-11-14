@@ -1,12 +1,15 @@
 # FitGirl PrivateBin / FileKeeper direct-link extractor for GitHub Actions
 # Accepts FitGirl paste.fitgirl-repacks.site URLs and FileKeeper file-page URLs.
+# FileKeeper pages are resolved concurrently to reduce total waiting time.
 
 import base64
 import json
 import os
 import re
+import threading
 import time
 import zlib
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from curl_cffi import requests as cffi_requests
@@ -17,6 +20,28 @@ from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 BASE58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
 INPUT_FILE = Path(__file__).with_name("links.txt")
 OUTPUT_FILE = Path(__file__).with_name("extracted_links.txt")
+DEFAULT_WORKERS = 5
+MAX_WORKERS = 10
+
+# Each worker gets its own HTTP session; curl_cffi sessions are not shared
+# between threads.
+_thread_local = threading.local()
+
+
+def get_session():
+    if not hasattr(_thread_local, "session"):
+        _thread_local.session = cffi_requests.Session(impersonate="chrome")
+    return _thread_local.session
+
+
+def get_worker_count():
+    raw_value = os.environ.get("MAX_WORKERS", str(DEFAULT_WORKERS))
+    try:
+        workers = int(raw_value)
+    except ValueError:
+        print(f"Invalid MAX_WORKERS={raw_value!r}; using {DEFAULT_WORKERS}.")
+        workers = DEFAULT_WORKERS
+    return max(1, min(workers, MAX_WORKERS))
 
 
 def base58_decode(value):
@@ -27,7 +52,7 @@ def base58_decode(value):
     while number:
         number, remainder = divmod(number, 256)
         result = bytes([remainder]) + result
-    return b"\x00" * (len(value) - len(value.lstrip("1"))) + result
+    return b"\\x00" * (len(value) - len(value.lstrip("1"))) + result
 
 
 def decrypt_privatebin(url, password=""):
@@ -81,10 +106,12 @@ def extract_one(file_url, session):
         print(f"  {code}: CAPTCHA required; skipped.")
         return None
 
+    # Preserve the countdown supplied by FileKeeper before requesting the link.
     try:
-        time.sleep(int(attr("countdown", "5")) + 1)
+        countdown = max(0, int(attr("countdown", "5")))
     except ValueError:
-        time.sleep(6)
+        countdown = 5
+    time.sleep(countdown + 1)
 
     form_data = {
         "op": "download2",
@@ -99,44 +126,60 @@ def extract_one(file_url, session):
     )
     direct_url = response.headers.get("location")
     if not direct_url:
-        match = re.search(r'https://[^\s"\'<>]+dlproxy[^\s"\'<>]+', response.text)
+        match = re.search(r'https://[^\\s"\\'<>]+dlproxy[^\\s"\\'<>]+', response.text)
         direct_url = match.group(0) if match else None
     if not direct_url:
         print(f"  {code}: no CDN link (HTTP {response.status_code}).")
     return direct_url
 
 
-def extract_all(input_text):
-    session = cffi_requests.Session(impersonate="chrome")
-    extracted = []
+def resolve_file_url(file_url):
+    """Run one FileKeeper resolution using this thread's private session."""
+    try:
+        result = extract_one(file_url, get_session())
+        if result:
+            print(f"  ✓ {result}")
+        return result
+    except Exception as exc:
+        print(f"  Error for {file_url}: {exc}")
+        return None
 
-    input_urls = re.findall(r"https?://[^\s,;]+", input_text)
+
+def extract_all(input_text):
+    input_urls = re.findall(r"https?://[^\\s,;]+", input_text)
+    file_urls = []
+
+    # Decrypt each PrivateBin paste and collect every FileKeeper page first.
     for line in input_urls:
-        line = line.strip().rstrip("\"'<>)]}")
+        line = line.strip().rstrip("\\\"'<>)]}")
         if not line:
             continue
 
         if line.startswith("https://paste.fitgirl-repacks.site/"):
             try:
                 paste_text = decrypt_privatebin(line)
-                file_urls = re.findall(r"https://filekeeper\.net/[^\s<>\"]+", paste_text)
+                file_urls.extend(
+                    re.findall(r"https://filekeeper\\.net/[^\\s<>\\"]+", paste_text)
+                )
             except Exception as exc:
                 print(f"  Could not decrypt paste: {exc}")
-                continue
         elif "filekeeper.net/" in line:
-            file_urls = [line]
+            file_urls.append(line)
         else:
             print(f"  Unsupported input skipped: {line}")
-            continue
 
-        for file_url in file_urls:
-            try:
-                result = extract_one(file_url, session)
-                if result:
-                    print(f"  ✓ {result}")
-                    extracted.append(result)
-            except Exception as exc:
-                print(f"  Error for {file_url}: {exc}")
+    # Remove duplicate pages before scheduling requests.
+    file_urls = list(dict.fromkeys(url.split("#", 1)[0].strip() for url in file_urls))
+    if not file_urls:
+        return []
+
+    workers = get_worker_count()
+    print(f"Resolving {len(file_urls)} FileKeeper page(s) with {workers} worker(s)...")
+
+    # executor.map runs requests concurrently and preserves input result order.
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        results = executor.map(resolve_file_url, file_urls)
+        extracted = [result for result in results if result]
 
     return list(dict.fromkeys(extracted))
 
@@ -154,9 +197,9 @@ def main():
 
     results = extract_all(input_text)
     OUTPUT_FILE.write_text(
-        "\n".join(results) + ("\n" if results else ""), encoding="utf-8"
+        "\\n".join(results) + ("\\n" if results else ""), encoding="utf-8"
     )
-    print(f"\nExtracted {len(results)} link(s). Output: {OUTPUT_FILE}")
+    print(f"\\nExtracted {len(results)} link(s). Output: {OUTPUT_FILE}")
 
 
 if __name__ == "__main__":
