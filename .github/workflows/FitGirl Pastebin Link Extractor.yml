@@ -8,6 +8,11 @@ on:
         required: false
         type: string
         default: ""
+      artifact_name:
+        description: "Simple name for the downloaded result artifact (without a file extension)"
+        required: false
+        type: string
+        default: "fitgirl-extracted-links"
 
 permissions:
   contents: read
@@ -39,7 +44,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: fitgirl-extracted-links
+          name: ${{ inputs.artifact_name || 'fitgirl-extracted-links' }}
           path: fitgirl-extractor/extracted_links.txt
           if-no-files-found: warn
           retention-days: 3
