@@ -52,7 +52,7 @@ def base58_decode(value):
     while number:
         number, remainder = divmod(number, 256)
         result = bytes([remainder]) + result
-    return b"\\x00" * (len(value) - len(value.lstrip("1"))) + result
+    return b"\x00" * (len(value) - len(value.lstrip("1"))) + result
 
 
 def decrypt_privatebin(url, password=""):
@@ -126,7 +126,7 @@ def extract_one(file_url, session):
     )
     direct_url = response.headers.get("location")
     if not direct_url:
-        match = re.search(r'https://[^\\s"\\'<>]+dlproxy[^\\s"\\'<>]+', response.text)
+        match = re.search(r'https://[^\s"\'<>]+dlproxy[^\s"\'<>]+', response.text)
         direct_url = match.group(0) if match else None
     if not direct_url:
         print(f"  {code}: no CDN link (HTTP {response.status_code}).")
@@ -146,12 +146,12 @@ def resolve_file_url(file_url):
 
 
 def extract_all(input_text):
-    input_urls = re.findall(r"https?://[^\\s,;]+", input_text)
+    input_urls = re.findall(r"https?://[^\s,;]+", input_text)
     file_urls = []
 
     # Decrypt each PrivateBin paste and collect every FileKeeper page first.
     for line in input_urls:
-        line = line.strip().rstrip("\\\"'<>)]}")
+        line = line.strip().rstrip("\"'<>)]}")
         if not line:
             continue
 
@@ -159,7 +159,7 @@ def extract_all(input_text):
             try:
                 paste_text = decrypt_privatebin(line)
                 file_urls.extend(
-                    re.findall(r"https://filekeeper\\.net/[^\\s<>\\"]+", paste_text)
+                    re.findall(r"https://filekeeper\.net/[^\s<>\"]+", paste_text)
                 )
             except Exception as exc:
                 print(f"  Could not decrypt paste: {exc}")
@@ -197,9 +197,9 @@ def main():
 
     results = extract_all(input_text)
     OUTPUT_FILE.write_text(
-        "\\n".join(results) + ("\\n" if results else ""), encoding="utf-8"
+        "\n".join(results) + ("\n" if results else ""), encoding="utf-8"
     )
-    print(f"\\nExtracted {len(results)} link(s). Output: {OUTPUT_FILE}")
+    print(f"\nExtracted {len(results)} link(s). Output: {OUTPUT_FILE}")
 
 
 if __name__ == "__main__":
